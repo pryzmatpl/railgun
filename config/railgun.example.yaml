@@ -1,0 +1,222 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 RailGun contributors
+#
+# RailGun — example configuration (non-secret defaults)
+#
+# Copy to `railgun.yaml` and edit. NEVER put a secret in this file:
+# secrets come from environment variables, Docker secrets, or mounted files only.
+#
+# Precedence: shipped defaults -> explicit --config path -> environment overlay.
+# RailGun validates all configuration at startup and refuses to start on invalid values.
+
+server:
+  # SMTP submission listener. Port 25 is never bound by default.
+  smtp_bind: "0.0.0.0:2525"
+  # Optional submission TLS (implicit TLS). Requires `smtp_tls_cert` / `smtp_tls_key`.
+  smtp_tls_bind: null
+  # HTTP API listener.
+  http_bind: "0.0.0.0:2526"
+  # MCP streamable-HTTP listener (optional; stdio is always available).
+  mcp_http_bind: null
+  # Maximum accepted message size in bytes. Exceeding it yields SMTP 552.
+  max_message_bytes: 26214400      # 25 MiB
+  max_recipients_per_message: 50
+  max_recipients_per_transaction: 100
+  max_command_rate_per_minute: 600
+
+tls:
+  # Outbound SMTP requires TLS >= 1.2 with certificate verification.
+  min_version: "1.2"
+  reject_unauthorized: true
+  smtp_tls_cert: null
+  smtp_tls_key: null
+
+store:
+  # "sqlite" (single-node dev), "postgres" (production), or "memory" (tests only).
+  driver: "sqlite"
+  # Path for sqlite. For postgres, use `url` with a secret-provider reference.
+  path: "./data/railgun.db"
+  url: null
+  # At-rest encryption of message bodies is required in production.
+  encrypt_bodies: true
+
+queue:
+  # Durable outbox worker.
+  concurrency: 8
+  lease_seconds: 300
+  # Bounded retries: attempts, base backoff, max delay.
+  max_attempts: 5
+  backoff_base_seconds: 60
+  backoff_max_seconds: 86400       # 24h
+
+outbound:
+  # "direct" (recipient MX — the default and primary mode) or
+  # "relay" (operator SMTP relay — an explicit fallback only).
+  mode: "direct"
+  relay:
+    # Only consulted when mode == "relay".
+    host: null                     # e.g. smtp.example.net
+    port: 587
+    secure: false                  # true for implicit TLS (465)
+    username_env: "RAILGUN_OUTBOUND_RELAY_USERNAME"
+    password_env: "RAILGUN_OUTBOUND_RELAY_PASSWORD"
+  direct:
+    # Resolve the recipient domain's MX records. Direct mode without MX
+    # lookup is rejected at validation time.
+    mx_lookup: true
+    ipv4_first: true
+    ipv6_fallback: true
+    connection_timeout_ms: 10000
+    command_timeout_ms: 30000
+    # Opportunistic STARTTLS with certificate verification.
+    require_tls: true
+    # Require a static outbound IP and published reverse DNS for direct mode.
+    require_reverse_dns: true
+    allowed_destination_cidrs: []
+
+auth:
+  # Local trusted submission via loopback/unix socket. Default deny.
+  allow_local_submission: false
+  local_principal: "local"
+  # mTLS client certificate -> principal mapping (optional).
+  mtls_ca_cert: null
+  # Setup token for first-boot admin bootstrap. Printed once if unset.
+  setup_token_env: "RAILGUN_AUTH_SETUP_TOKEN"
+
+rate_limit:
+  # Tenant quotas (sliding window).
+  messages_per_minute: 60
+  messages_per_hour: 1000
+  messages_per_day: 10000
+  recipients_per_message: 50
+  bytes_per_day: 268435456         # 256 MiB
+  concurrent_in_flight: 20
+  # First-time recipients are limited far more tightly than established ones.
+  new_recipients_per_hour: 25
+  # Optional: new destinations must confirm before release.
+  require_recipient_confirmation: false
+
+spam:
+  # 0.0 (permissive) .. 1.0 (strict). Tenant-configurable.
+  score_threshold: 0.7
+  # "accept" | "tag" | "quarantine" | "reject" on threshold breach.
+  on_threshold: "reject"
+  quarantine: true
+  disarm_active_content: true
+  strip_tracking_pixels: true
+  blocklist:
+    local: []
+    remote: []
+    remote_fail_policy: "fail_open"   # per-list policy: fail_open | fail_closed
+    cache_ttl_seconds: 3600
+  protect_role_addresses: true
+  warmup:
+    enabled: true
+    # New tenants may only send to verified destinations until warmup completes.
+    verified_only_until_verified: true
+  # Two thresholds for the deterministic content scorer. The score is a
+  # versioned function of structural features; `allow_threshold` is the
+  # review band boundary and `deny_threshold` the hard-reject boundary.
+  # allow_threshold must be below deny_threshold.
+  allow_threshold: 0.35
+  deny_threshold: 0.70
+  role_addresses:
+    # "allow" | "throttle" | "deny" | "require_verified".
+    # "require_verified" is the default for cold tenants.
+    mode: "require_verified"
+    # Protected local-parts. The shipped list is in
+    # src/domain/identity.ts (DEFAULT_ROLE_ADDRESSES).
+    list: []
+  # Trap / honeypot recipients. Denied unconditionally; a hit also feeds the
+  # reputation counters of the implicated tenant and sending domain.
+  trap_recipients: []
+  # How long a content HMAC stays in the duplicate-detection window.
+  duplicate_window_seconds: 3600
+  # Brands protected against lookalike domains (Levenshtein distance <= 1).
+  protected_brands: []
+
+identity:
+  # Sending-domain identity registry and DNS posture. DNS records are read
+  # and verified; RailGun never writes them.
+  require_spf_record: false          # true => deny when no SPF record exists
+  require_dmarc_aligned: true        # false => downgrade a DMARC mismatch to a warning
+  alignment_mode: "strict"           # strict | relaxed
+  dns_timeout_ms: 3000
+  dns_failure_policy: "fail_open"    # fail_open | fail_closed
+  # Domains allowed to appear as a From but mapped to a parent tenant.
+  authorized_subdomains: []
+
+signer:
+  # DKIM signing. Private keys come from an env var, file path or secret
+  # mount only — never from this file, the database, the logs or the audit.
+  default_algorithm: "rsa-sha256"    # rsa-sha256 | ed25519
+  rsa_min_bits: 2048
+  header_canonicalization: "relaxed/relaxed"
+  body_canonicalization: "relaxed/relaxed"
+  sign_headers: ["from", "to", "subject", "date", "message-id", "reply-to"]
+  key_dir: null                      # directory of PEM keys, or null to use env refs
+
+warmup_ramp:
+  # Per-domain warmup ramp. When present this block OVERRIDES
+  # spam.warmup.* for the ramp parameters (see src/spam/resolutions.ts).
+  warmup_days: 30
+  ramp_multiplier: 1.5
+  warmup_daily_cap: 50
+  warmup_recipient_cap: 25
+  verified_only: true
+
+relay:
+  # Recipient scope per principal. The default is "none": the set of
+  # recipient domains a principal may reach is empty unless explicitly
+  # configured. "all" requires the admin role and is audited.
+  default_scope: "none"              # none | allowlist | same_domain_only | verified_recipients_only | all
+  allowlist: []                      # explicit recipient domains
+  allowlist_includes_subdomains: false
+
+audit:
+  # Append-only, tamper-evident hash-chained NDJSON.
+  enabled: true
+  path: "./data/audit.ndjson"
+  # Hash recipient addresses with a rotating salt; never store raw addresses.
+  hash_recipients: true
+  salt_env: "RAILGUN_AUDIT_SALT"
+  # strict: a failed audit write fails the operation closed.
+  write_failure_mode: "warn"     # "warn" | "strict"
+  retention_days: 365
+
+observability:
+  log_level: "info"               # trace | debug | info | warn | error
+  log_format: "json"
+  metrics_bind: "0.0.0.0:2527"
+  # Telemetry is opt-in and redacted. Nothing leaves the deployment by default.
+  telemetry: false
+
+retention:
+  message_metadata_days: 30
+  message_body_days: 7
+
+delivery:
+  # Report `accepted` (SMTP 250) only. `delivered` requires a DSN/provider event.
+  confirm_delivery_via_dsn: true
+  # Deterministic Message-ID, so a crash between remote accept and local commit
+  # produces one identifiable duplicate rather than an ambiguous one.
+  deterministic_message_id: true
+
+secrets:
+  # At-rest master key. When set, secrets stored by the deployment are
+  # encrypted with it. Never contains the key itself — a path only.
+  master_key_file: null
+  # Root for the store, the audit chain and the secret store.
+  data_dir: "./data"
+
+dkim:
+  # Signing keys. The private key lives in a file; only its path is recorded.
+  keys: []
+  # - selector: "mail"
+  #   domain: "example.com"
+  #   private_key_file: "./secrets/dkim-mail.pem"
+
+domains:
+  # Sender domains permitted to submit. An empty list means "no restriction";
+  # unit E enforces the no-open-relay rule.
+  allowed: []

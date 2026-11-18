@@ -1,0 +1,26 @@
+# Keep the build context small and free of local state.
+node_modules/
+dist/
+coverage/
+test/
+tests/
+src/smtp/__tests__/
+
+# Never ship credentials or local state into an image layer
+.env
+.env.*
+data/
+secrets/
+*.db
+*.db-wal
+*.db-shm
+*.ndjson
+*.log
+
+# Repository and editor noise
+.git/
+.gitignore
+.idea/
+.vscode/
+.DS_Store
+*.swp

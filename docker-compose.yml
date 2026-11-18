@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 The RailGun authors
+#
+# RailGun — a standalone, zero-configuration deployment.
+#
+#   docker compose up --build
+#   curl http://localhost:2526/ready
+#
+# No secret literal is committed here. Supply credentials through the
+# operator's shell or a `.env` file next to this compose file.
+
+services:
+  railgun:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: railgun:0.1.0
+    restart: unless-stopped
+    # The operator bind mounts. Anonymous volumes are deliberately avoided:
+    # an anonymous volume would shadow these bind mounts and the store would
+    # silently start empty.
+    volumes:
+      - railgun-data:/app/data
+    environment:
+      # Direct-to-MX outbound is the default and the primary mode. An
+      # operator relay is an explicit fallback.
+      RAILGUN_OUTBOUND_MODE: "${RAILGUN_OUTBOUND_MODE:-direct}"
+      RAILGUN_SERVER_HTTP_BIND: "${RAILGUN_SERVER_HTTP_BIND:-0.0.0.0:2526}"
+      RAILGUN_SERVER_SMTP_BIND: "${RAILGUN_SERVER_SMTP_BIND:-0.0.0.0:2525}"
+      RAILGUN_STORE_DRIVER: "${RAILGUN_STORE_DRIVER:-sqlite}"
+      RAILGUN_STORE_PATH: "${RAILGUN_STORE_PATH:-/app/data/railgun.db}"
+      RAILGUN_SECRETS_DATA_DIR: "${RAILGUN_SECRETS_DATA_DIR:-/app/data}"
+      # Secrets are never written into this file. When the deployment needs a
+      # credential, export it in the operator's shell or mount a secret file
+      # and point the matching *_FILE variable at it.
+      # RAILGUN_OUTBOUND_RELAY_PASSWORD_FILE: /run/secrets/relay_password
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:2526/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3
+
+volumes:
+  railgun-data:

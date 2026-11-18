@@ -1,0 +1,95 @@
+{
+  "name": "railgun",
+  "version": "0.1.0",
+  "description": "RailGun \u2014 the open Mailgun alternative. Self-hosted, agent-first email delivery over direct-to-MX outbound, with MCP, HTTP and SMTP surfaces.",
+  "keywords": [
+    "email",
+    "smtp",
+    "mx",
+    "mcp",
+    "dkim",
+    "mailgun",
+    "self-hosted",
+    "email-delivery"
+  ],
+  "license": "GPL-3.0-or-later",
+  "author": "The RailGun authors",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./config": {
+      "types": "./dist/config/config.d.ts",
+      "import": "./dist/config/config.js"
+    },
+    "./mcp": {
+      "types": "./dist/mcp/index.d.ts",
+      "import": "./dist/mcp/index.js"
+    },
+    "./outbound": {
+      "types": "./dist/outbound/index.d.ts",
+      "import": "./dist/outbound/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "railgun": "./dist/bin.js",
+    "railgun-mcp": "./dist/mcp/server-main.js"
+  },
+  "files": [
+    "dist",
+    "config",
+    "docs",
+    "LICENSE",
+    "NOTICE",
+    "railgun-logo.jpg",
+    "README.md",
+    "SECURITY.md",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pryzmatpl/railgun.git"
+  },
+  "bugs": {
+    "url": "https://github.com/pryzmatpl/railgun/issues"
+  },
+  "homepage": "https://github.com/pryzmatpl/railgun#readme",
+  "scripts": {
+    "build": "npm run --silent build:tsc && node scripts/postbuild.mjs",
+    "build:tsc": "tsc -p tsconfig.build.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint:licence": "node scripts/check-licence-headers.mjs",
+    "prepublishOnly": "npm run build",
+    "prepack": "npm run --silent build",
+    "pretest": "npm run --silent build",
+    "test:policy": "vitest run --config vitest.policy.config.ts",
+    "test:verification": "vitest run test/verification",
+    "release:check": "node scripts/release-check.mjs",
+    "release:live": "node scripts/live-delivery.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "yaml": "^2.6.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}
